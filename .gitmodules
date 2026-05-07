@@ -1,0 +1,16 @@
+[submodule "thirdparty/lietorch"]
+	path = thirdparty/lietorch
+	branch = master
+	url = https://github.com/princeton-vl/lietorch.git
+[submodule "thirdparty/eigen"]
+	path = thirdparty/eigen
+	branch = master
+	url = https://gitlab.com/libeigen/eigen.git
+[submodule "thirdparty/simple-knn"]
+	path = thirdparty/simple-knn
+	branch = main
+	url = https://github.com/camenduru/simple-knn.git
+[submodule "thirdparty/diff-gaussian-rasterization-w-pose"]
+	path = thirdparty/diff-gaussian-rasterization-w-pose
+	branch = main
+	url = https://github.com/rmurai0610/diff-gaussian-rasterization-w-pose.git

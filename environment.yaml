@@ -1,0 +1,24 @@
+name: freeocc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - setuptools
+  - wheel
+  - packaging
+  - ninja
+  - numpy=1.26.4
+  - scipy
+  - pyyaml
+  - tqdm
+  - pillow
+  - scikit-image
+  - scikit-learn
+  - matplotlib
+  - pandas
+  - ffmpeg
+  - suitesparse
+  - eigen
+  - opencv=4.9

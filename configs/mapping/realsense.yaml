@@ -1,0 +1,50 @@
+defaults:
+  - /mapping/base@_here_
+
+warmup: 10
+delay: 5
+
+online_opt:
+  iters: 30
+  batch_mode: False
+  batch_size: 10
+  filter:
+    multiview: True
+    mv_count_th: 2
+    bin_th: 0.03
+    uncertainty: False
+    conf_th: 0.03
+
+loss:
+  supervise_with_prior: True
+
+input:
+  sensor_type: 'depth'
+  pcd_downsample_init: 4
+  pcd_downsample: 24
+  adaptive_pointsize: False
+  point_size: 0.02
+  type: 'scannet'
+
+pipeline_params:
+  convert_SHs_python: False
+  compute_cov3D_python: False
+
+frame_gaussians_stride: 1
+frame_gaussians_init_scale: 0.01
+frame_gaussians_opacity_value: 0.999
+frame_gaussians_ray_aspect: 1.0
+frame_gaussians_window: 10
+frame_gaussians_opt_iters: 20
+frame_gaussians_lr_scale: 0.001
+frame_gaussians_lr_rot: 0.001
+frame_gaussians_lr_opa: 0.00001
+frame_gaussians_views_per_iter: 10
+
+gui_vis_mode: ov3d_label
+gui_overlay_alpha: 0.5
+ov_name_path: ./src/scannet_utils/realsense_2cup.txt
+scene_occ_root: /data/datasets/slam/scannet200/scene_occ
+save_mesh_each_update: true
+save_mesh_each_update_every: 1
+enable_occ_eval: false

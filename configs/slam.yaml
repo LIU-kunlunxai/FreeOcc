@@ -1,0 +1,54 @@
+defaults:
+ - _self_
+ - mapping: scannet.yaml
+ - tracking: scannet.yaml
+ - loop_closure: eigen.yaml
+ - data: scannet/base.yaml
+
+hydra:
+  run:
+    dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}_${mode}
+  job:
+    chdir: False
+    name: test # Change this to your experiment run name, e.g. the dataset you run on or the run of a configuration
+
+device: "cuda:0"
+sync_method: strict
+output_folder: /data/FreeOcc/outputs/
+
+stride: 1
+mode: "rgbd"  # 'mono', 'rgbd'
+use_gt_poses: False  # When True, skip SLAM and use GT poses for mapping (ablation experiment)
+gt_motion_thresh: 0.1  # Keyframe selection threshold in meters (camera center distance)
+mono_depth: "metric3d-vit_giant2" # 'lotus_d' 'zoed-nk', 'metric3d-vit_giant2', 'depthany-vitl-outdoor', 'depthany-vitl-indoor'
+with_dyn: False # Filter out dynamic objects if masks are provided in the dataset
+opt_intr: False # Optimizes additional intrinsic parameters
+sleep_delay: 0.45 # Sleep timer to cool off the system sometimes
+
+## Components
+run_frontend: True # This should always be True!
+run_backend: True # Global optimization
+run_loop_detection: True # Loop closure detection
+run_mapping: True # Rendering 
+
+## Visualizations / GUIs
+run_visualization: True
+run_mapping_gui: True
+show_stream: False
+# plot_uncertainty: True # To show the uncertainty of the pose graph optimization
+
+# You can start/stop in the middle of a sequence/dataset if you want
+# t_start: 0
+# t_stop: 1000
+
+mapping:
+  covisibility_th: 1.0
+
+## Frequencies for synchronizing the different main parts of the pipeline
+# In an optimal setup, the Frontend would be the bottlenck, which can run at ~20-30FPS
+# Mapping takes ~5-7 iters/s, i.e. with a well tuned system each Render update hits <= 0.4fps
+backend_every: 8 # Run global bundle adjustment only every k Frontend updates
+# NOTE this is a trade-off between accuracy and speed, we can also add more compute to refinement!
+mapper_every: 15 # Run Renderer every k Frontend updates
+
+debug_xyz: True

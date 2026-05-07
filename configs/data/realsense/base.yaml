@@ -1,0 +1,30 @@
+dataset: realsense
+
+input_folder: ""
+
+stride: 1
+
+cam:
+  camera_model: pinhole
+
+  H: 1080
+  W: 1920
+
+  H_out: 256
+  W_out: 320
+
+  H_edge: 0
+  W_edge: 0
+
+  fx: 1365.3583984375
+  fy: 1362.2244873046875
+  cx: 933.46484375
+  cy: 552.1832275390625
+
+  k1: 0.0
+  k2: 0.0
+  p1: 0.0
+  p2: 0.0
+  k3: 0.0
+
+png_depth_scale: 1000.0

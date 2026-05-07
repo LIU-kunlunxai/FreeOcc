@@ -1,0 +1,42 @@
+defaults:
+  - /tracking/base@_here_
+
+buffer: 256
+warmup: 8
+
+motion_filter:
+  thresh: 4.0
+
+frontend:
+  steps1: 4
+  steps2: 2
+  iters: 4
+
+  max_age: 20
+
+  keyframe_thresh: 4.0
+  thresh: 15.0
+  window: 25
+  max_factors: 150
+  radius: 5
+  nms: 1
+
+  release_cache: True
+  pose_interpolation: linear
+
+backend:
+  warmup: 15
+  do_refinement: True
+
+  window: 150
+  thresh: 50
+  max_factor_mult: 8
+  radius: 2
+  nms: 2
+
+  use_loop_closure: False
+  loop_window: 40
+  loop_thresh: 50.0
+  loop_radius: 5
+  loop_nms: 12
+  loop_max_factor_mult: 16
