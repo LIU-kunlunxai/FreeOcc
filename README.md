@@ -124,6 +124,8 @@ mim install "mmcv==2.1.0"
 pip install mmsegmentation==1.2.2
 ```
 
+If `mim install "mmcv==2.1.0"` reports version/build incompatibilities or falls back to downloading a source tarball instead of a prebuilt wheel, please build the full `mmcv` package from source by following the official [MMCV installation guide](https://mmcv.readthedocs.io/en/2.x/get_started/installation.html).
+
 Build the required CUDA extensions:
 
 ```bash
