@@ -382,7 +382,7 @@ def optimize_scale_rotation(
     seed: int = 0,
     verbose_every: int = 20,
 ):
-    device = g._surface_xyz.device
+    device = g._surface_xyz.device if hasattr(g, "_surface_xyz") else g._xyz.device
     torch.manual_seed(seed)
 
     # freeze everything except scaling/rotation
