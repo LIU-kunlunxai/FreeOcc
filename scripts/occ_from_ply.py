@@ -42,7 +42,7 @@ def load_ply(ply_path: str, device: torch.device, max_gaussians: int = 0):
     ply = PlyData.read(ply_path)
     v = ply["vertex"].data
     names = v.dtype.names
-    n = v.count
+    n = len(v)
 
     print(f"[INFO] PLY: {n} vertices, fields: {names}")
 
@@ -204,10 +204,9 @@ def main():
         (np.argwhere(occ_mask).astype(np.float32) + 0.5) * args.grid_size
 
     # 用 RGB 着色（也可用语义 PCA）
-    colors_np = cv2.applyColorMap(
-        (occ_np[occ_mask] / (occ_np[occ_mask].max() + 1e-6) * 255).astype(np.uint8),
-        cv2.COLORMAP_JET
-    )[:, ::-1] / 255.0  # BGR→RGB, [0,1]
+    vals = occ_np[occ_mask]
+    vals_norm = np.clip(vals / (vals.max() + 1e-6), 0, 1)
+    colors_np = np.repeat(vals_norm[:, None], 3, axis=1)  # BGR→RGB, [0,1]
 
     import open3d as o3d
     pcd = o3d.geometry.PointCloud()
