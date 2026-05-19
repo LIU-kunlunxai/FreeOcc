@@ -83,12 +83,16 @@ def make_depth_vis(depth, z_min, z_max, colormap=None):
     mask = depth > 0
     if mask.sum() == 0:
         return vis
-    z_norm = np.clip((depth[mask] - z_min) / (z_max - z_min + 1e-6), 0, 1)
     if colormap is None:
-        gray_vals = ((1 - z_norm) * 255).astype(np.uint8)  # 近白远黑
+        d = depth[mask]
+        disp = 1.0 / (d + 1e-6)                           # 视差空间
+        disp_norm = (disp - disp.min()) / (disp.max() - disp.min() + 1e-6)
+        gray_vals = (disp_norm * 255).astype(np.uint8)   # 近白远黑
         yy, xx = np.where(mask)
         vis[yy, xx] = np.stack([gray_vals] * 3, axis=-1)
     else:
+        d = depth[mask]
+        z_norm = np.clip((d - d.min()) / (d.max() - d.min() + 1e-6), 0, 1)
         cmapped = cv2.applyColorMap((z_norm * 255).astype(np.uint8), colormap)
         cm_flat = cmapped.reshape(-1, 3)
         yy, xx = np.where(mask)
@@ -256,27 +260,33 @@ def main():
             z_min_lidar = z_max_lidar = 1.0
             n_pts_total = n_pixels = 0
 
-        # ── 确定统一的深度显示范围 ──
-        # 取 LiDAR 和相机深度的共同范围
-        z_min = z_max = 10.0
+        # ── LiDAR 深度显示范围 ──
         if n_pixels > 0:
-            z_min, z_max = z_min_lidar, z_max_lidar
+            z_min_l, z_max_l = z_min_lidar, z_max_lidar
+        else:
+            z_min_l = z_max_l = 10.0
+
+        # ── 相机深度独立显示范围 (不与 LiDAR 共享) ──
         if cam_depth is not None:
             cam_valid = cam_depth > 0
             if cam_valid.sum() > 0:
-                z_min = min(z_min, cam_depth[cam_valid].min())
-                z_max = max(z_max, cam_depth[cam_valid].max())
+                z_min_c = float(cam_depth[cam_valid].min())
+                z_max_c = float(cam_depth[cam_valid].max())
+            else:
+                z_min_c = z_max_c = 10.0
+        else:
+            z_min_c = z_max_c = 10.0
 
         # ── 各列可见化 ──
         # 列1: LiDAR 叠加图
         col1 = overlay
 
         # 列2: LiDAR 深度图
-        col2 = make_depth_vis(lidar_depth, z_min, z_max)
+        col2 = make_depth_vis(lidar_depth, z_min_l, z_max_l)
 
-        # 列3: 相机深度图
+        # 列3: 相机深度图 (独立范围, 原始灰度)
         if cam_depth is not None and (cam_depth > 0).sum() > 0:
-            col3 = make_depth_vis(cam_depth, z_min, z_max)
+            col3 = make_depth_vis(cam_depth, z_min_c, z_max_c)
             has_cam = True
         else:
             col3 = np.zeros((H, W, 3), dtype=np.uint8)
@@ -307,8 +317,8 @@ def main():
 
         # 底部信息条
         cv2.putText(result,
-                    f"Frame {frame_idx} | LiDAR: {n_pts_total} pts → {n_pixels} px "
-                    f"| depth range [{z_min:.2f}, {z_max:.2f}]m",
+                    f"Frame {frame_idx} | LiDAR: {n_pts_total} pts → {n_pixels} px [{z_min_l:.1f}~{z_max_l:.1f}]m "
+                    f"| Cam depth [{z_min_c:.1f}~{z_max_c:.1f}]m",
                     (4, result.shape[0] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
 
         out_path = output_dir / f"frame_{frame_idx:04d}.png"
@@ -318,7 +328,7 @@ def main():
             print(f"  [{out_idx+1}/{len(selected_indices)}] frame_{frame_idx:04d}.png "
                   f"— LiDAR {n_pts_total}pts/{n_pixels}px, "
                   f"cam_depth={'OK' if has_cam else 'N/A'}, "
-                  f"range=[{z_min:.1f}~{z_max:.1f}]m")
+                  f"range=[{z_min_c:.1f}~{z_max_c:.1f}]m")
 
     print(f"\n完成! {len(selected_indices)} 张对比图保存到: {output_dir}")
     print(f"四列: RGB | LiDAR叠加 | LiDAR深度 | 相机深度")

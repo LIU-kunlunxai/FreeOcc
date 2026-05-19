@@ -7,7 +7,7 @@
 # ===================================================================
 set -euo pipefail
 
-FREEOC_DIR="${1:-$HOME/FreeOcc}"
+FREEOC_DIR="${1:-/root/workspace/FreeOcc}"
 
 echo "=================================="
 echo "FreeOcc 远程环境安装"
@@ -55,14 +55,14 @@ echo "GPU 架构: sm_$GPU_ARCH"
 CUDA_MAJOR="${CUDA_VER:0:2}"
 if [ "$CUDA_MAJOR" -ge 12 ]; then
     TORCH_VERSION="2.9.0"
+    TORCHVISION_VERSION="0.24.0"
     TORCH_CUDA_TAG="cu128"
     TORCH_INDEX="https://download.pytorch.org/whl/cu128"
-    PYTORCH3D_CUDA=0  # 不编译 CUDA 扩展
 else
     TORCH_VERSION="2.5.0"
+    TORCHVISION_VERSION="0.20.0"
     TORCH_CUDA_TAG="cu118"
     TORCH_INDEX="https://download.pytorch.org/whl/cu118"
-    PYTORCH3D_CUDA=0
 fi
 
 echo "PyTorch: $TORCH_VERSION ($TORCH_CUDA_TAG)"
@@ -85,7 +85,7 @@ echo "  Python: $PYTHON ($($PYTHON --version))"
 echo "[2/7] 安装 PyTorch $TORCH_VERSION + $TORCH_CUDA_TAG ..."
 $PYTHON -c "import torch; print('torch', torch.__version__)" 2>/dev/null && echo "  PyTorch 已安装" || {
     pip install --index-url "$TORCH_INDEX" \
-        "torch==$TORCH_VERSION" "torchvision==0.$(echo $TORCH_VERSION | cut -d'.' -f2).0" "torchaudio==$TORCH_VERSION"
+        "torch==$TORCH_VERSION" "torchvision==$TORCHVISION_VERSION" "torchaudio==$TORCH_VERSION"
 }
 $PYTHON -c "import torch; assert torch.cuda.is_available(), 'CUDA不可用!'; print(f'  torch {torch.__version__} CUDA {torch.version.cuda} OK')"
 
