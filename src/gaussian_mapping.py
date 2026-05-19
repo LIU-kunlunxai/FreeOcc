@@ -1143,6 +1143,7 @@ class GaussianMapper(object):
         from trident import Trident
         proj_root = os.path.dirname(os.path.dirname(__file__))
         sam_checkpoint = os.path.join(proj_root, "pretrained", "sam_vit_b_01ec64.pth")
+        dino_checkpoint = os.path.join(proj_root, "pretrained", "dino_vitbase16_pretrain.pth")
 
         self.ov_model = Trident(
             clip_type='openai',
@@ -1154,6 +1155,7 @@ class GaussianMapper(object):
             minimal_area=225,
             debug=False,              # Keep debug off; it is slow.
             sam_ckpt=sam_checkpoint,
+            vfm_ckpt=dino_checkpoint,
             sam_model_type="vit_b",
             slide_crop=16 * 24,
             slide_stride=16 * 8,

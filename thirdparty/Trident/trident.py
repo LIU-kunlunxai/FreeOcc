@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import sys
@@ -30,6 +31,7 @@ class Trident(BaseSegmentor):
                  prob_thd=0.0, logit_scale=40, beta=1.2, gamma=3.0, slide_stride=112, slide_crop=336, debug = False,
                  sam_refinement=False, sam_model_type='vit_b', pamr_steps=0, pamr_stride=(8, 16),
                  sam_ckpt='pretrained/sam_vit_b_01ec64.pth',
+                 vfm_ckpt=None,
                  coarse_thresh=0.10, minimal_area=225,sam_mask_coff=0.005, **kwargs):
 
         data_preprocessor = SegDataPreProcessor(
@@ -45,7 +47,11 @@ class Trident(BaseSegmentor):
         self.clip_stride = int(model_type[-2:])
 
         self.vfm_model = vfm_model
-        self.vfm = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16')
+        if vfm_ckpt and os.path.exists(vfm_ckpt):
+            self.vfm = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16', pretrained=False)
+            self.vfm.load_state_dict(torch.load(vfm_ckpt, map_location='cpu'), strict=False)
+        else:
+            self.vfm = torch.hub.load('facebookresearch/dino:main', 'dino_vitb16')
         self.vfm = self.vfm.half()
         for p in self.vfm.parameters():
             p.requires_grad = False
