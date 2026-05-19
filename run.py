@@ -175,6 +175,7 @@ def run_slam(cfg):
     output_folder = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     if cfg.get("output_folder") and cfg.output_folder != "/data/FreeOcc/outputs/":
         output_folder = cfg.output_folder
+    os.makedirs(output_folder, exist_ok=True)
     log.info(OmegaConf.to_yaml(cfg))
     # Save the cfg to yaml file
     with open(os.path.join(output_folder, "config.yaml"), "w") as f:
