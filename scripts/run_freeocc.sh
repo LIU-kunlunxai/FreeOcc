@@ -11,20 +11,31 @@ cd /root/workspace/FreeOcc
 
 export TORCH_CUDA_ARCH_LIST="8.0"
 export CUDA_HOME=/usr/local/cuda-12.4
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_ROOT=/root/workspace/freeocc_output/$TIMESTAMP
 OCC_OUTPUT=$OUTPUT_ROOT/occupancy
 
+# 优先用 LiDAR 深度
+if [ -d "$DATA_DIR/depth_lidar" ]; then
+  if [ -d "$DATA_DIR/depth" ] && [ ! -L "$DATA_DIR/depth" ]; then
+    mv "$DATA_DIR/depth" "$DATA_DIR/depth_camera"
+  fi
+  [ -e "$DATA_DIR/depth" ] && rm -f "$DATA_DIR/depth"
+  ln -s "$DATA_DIR/depth_lidar" "$DATA_DIR/depth"
+  echo "[INFO] Using LiDAR depth (depth_lidar → depth)"
+fi
+
 echo "============================================"
-echo "Step 1/2: FreeOcc mono mapping"
+echo "Step 1/2: FreeOcc mapping"
 echo "  Data:   $DATA_DIR"
 echo "  Output: $OUTPUT_ROOT"
 echo "============================================"
 
 python run.py \
-  mode=mono \
-  mono_depth=metric3d-vit_giant2 \
+  mode=rgbd \
+  sync_method=relaxed \
   use_gt_poses=True \
   run_visualization=False \
   run_mapping_gui=False \
@@ -38,6 +49,8 @@ python run.py \
   data.cam.fy=385.938 \
   data.cam.cx=321.497 \
   data.cam.cy=241.840 \
+  data.png_depth_scale=1000.0 \
+  mapping.loss.supervise_with_prior=False \
   mapping.online_opt.filter.bin_th=0.02 \
   mapping.online_opt.filter.uncertainty=True \
   mapping.online_opt.filter.conf_th=0.05 \
@@ -48,7 +61,7 @@ echo "============================================"
 echo "Step 2/2: Occupancy + Semantic visualization"
 echo "============================================"
 
-PLY="$OUTPUT_ROOT/mesh/final_mono.ply"
+PLY="$OUTPUT_ROOT/mesh/final_rgbd.ply"
 
 if [ ! -f "$PLY" ]; then
   echo "ERROR: PLY not found at $PLY"
