@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_mean
+# from torch_scatter import scatter_mean
 from .modules import ConvGRU, BasicEncoder, GradientClip
 
 
