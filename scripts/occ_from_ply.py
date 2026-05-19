@@ -232,36 +232,63 @@ def main():
     cv2.imwrite(topdown_path, occ_color)
     print(f"[INFO] Saved: {topdown_path}")
 
-    # ── 7. 语义俯视图 (用语义特征 PCA 着色) ──
-    if sem_feat_dim >= 3:
-        sem_np = logits_sem_3d.cpu().numpy()
-        sem_occ = sem_np[occ_mask]  # [N_occ, C]
+    # ── 7. 语义俯视图 (argmax 类别标签着色) ──
+    if sem_feat_dim >= 2:
+        sem_np = logits_sem_3d.cpu().numpy()  # [H, W, D, C]
 
-        # PCA 到 3 通道
-        sem_mean = sem_occ.mean(axis=0, keepdims=True)
-        sem_centered = sem_occ - sem_mean
-        U, S, Vt = np.linalg.svd(sem_centered, full_matrices=False)
-        sem_pca = (sem_centered @ Vt[:3].T)  # [N_occ, 3]
+        # 每个体素取 argmax 类别
+        labels_3d = np.argmax(sem_np, axis=-1)  # [H, W, D]
+        n_classes = sem_feat_dim
 
-        # 归一化到 [0,1]
-        sem_pca -= sem_pca.min(axis=0, keepdims=True)
-        sem_pca /= sem_pca.max(axis=0, keepdims=True) + 1e-6
+        # 调色板 (10+1 类, 用 HSV 色环均匀分布)
+        palette = []
+        for i in range(n_classes):
+            hue = i / max(n_classes, 1) * 180
+            c = cv2.cvtColor(np.uint8([[[hue, 200, 200]]]), cv2.COLOR_HSV2BGR)[0, 0]
+            palette.append(c.tolist())
+        palette = np.array(palette, dtype=np.uint8)  # [C, 3]
 
-        # 重建 3D 语义体素
-        sem_3d_rgb = np.zeros((H, W, D, 3), dtype=np.float32)
-        occ_idx = np.argwhere(occ_mask)
-        sem_3d_rgb[occ_idx[:, 0], occ_idx[:, 1], occ_idx[:, 2]] = sem_pca
+        # 占用体素的类别
+        occ_idx = np.argwhere(occ_mask)  # [N_occ, 3]
+        labels_occ = labels_3d[occ_idx[:, 0], occ_idx[:, 1], occ_idx[:, 2]]
 
-        # XY 俯视图: 沿 Z 取 occ 最大的那个体素的语义
+        # 3D 语义 RGB
+        sem_3d_rgb = np.zeros((H, W, D, 3), dtype=np.uint8)
+        sem_3d_rgb[occ_idx[:, 0], occ_idx[:, 1], occ_idx[:, 2]] = palette[labels_occ]
+
+        # 保存带类别的体素 PLY
+        sem_pcd_path = os.path.join(args.output, "occ_voxel_sem_label.ply")
+        sem_colors_3d = sem_3d_rgb[occ_idx[:, 0], occ_idx[:, 1], occ_idx[:, 2]] / 255.0
+        pcd_sem = o3d.geometry.PointCloud()
+        pcd_sem.points = o3d.utility.Vector3dVector(occ_pts_np)
+        pcd_sem.colors = o3d.utility.Vector3dVector(sem_colors_3d.astype(np.float64))
+        o3d.io.write_point_cloud(sem_pcd_path, pcd_sem)
+        print(f"[INFO] Saved: {sem_pcd_path}")
+
+        # XY 俯视图: 沿 Z 取 occ 最大的那个体素的类别
         z_idx = np.argmax(occ_np, axis=2)  # [H, W]
         h_idx, w_idx = np.meshgrid(np.arange(H), np.arange(W), indexing="ij")
-        sem_xy = sem_3d_rgb[h_idx, w_idx, z_idx]  # [H, W, 3]
+        labels_xy = labels_3d[h_idx, w_idx, z_idx]  # [H, W]
+        sem_xy = palette[labels_xy]  # [H, W, 3]
 
-        sem_xy_img = (np.flipud(sem_xy.transpose(1, 0, 2)) * 255).astype(np.uint8)
-        sem_xy_img = cv2.cvtColor(sem_xy_img, cv2.COLOR_RGB2BGR)
-        sem_path = os.path.join(args.output, "occ_topdown_sem_pca.png")
+        sem_xy_img = np.flipud(sem_xy.transpose(1, 0, 2))  # 转置+上下翻转
+        sem_path = os.path.join(args.output, "occ_topdown_sem_label.png")
         cv2.imwrite(sem_path, sem_xy_img)
         print(f"[INFO] Saved: {sem_path}")
+
+        # 类别图例
+        legend_h = n_classes * 20 + 10
+        legend = np.ones((legend_h, 200, 3), dtype=np.uint8) * 255
+        for i in range(n_classes):
+            y0 = 10 + i * 20
+            cv2.rectangle(legend, (10, y0), (30, y0 + 15), palette[i].tolist(), -1)
+            cv2.putText(legend, f"cls{i}", (40, y0 + 13),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
+        legend_path = os.path.join(args.output, "occ_sem_legend.png")
+        cv2.imwrite(legend_path, legend)
+        print(f"[INFO] Saved legend: {legend_path}")
+        print(f"[INFO]   cls0=ceiling, cls1=floor, cls2=wall, cls3=window, cls4=chair")
+        print(f"[INFO]   cls5=bed, cls6=sofa, cls7=table, cls8=tv, cls9=furniture, cls10=objects")
 
     print("[DONE]")
 
