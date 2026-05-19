@@ -1005,8 +1005,12 @@ class GaussianMapper(object):
 
         final_aligned_gaussians = self.get_aligned_gaussians()
         ply_path = f"{self.output}/mesh/final_{self.mode}.ply"
-        final_aligned_gaussians.save_ply(ply_path)
-        self.info(f"Mesh saved at {ply_path} (from get_current_gaussians)")
+
+        if final_aligned_gaussians is not None:
+            final_aligned_gaussians.save_ply(ply_path)
+            self.info(f"Mesh saved at {ply_path} (from get_current_gaussians)")
+        else:
+            self.info("No aligned gaussians to save (empty map)")
 
         self.info(f"{len(self.iteration_info)} iterations, {len(self.cameras)/len(self.iteration_info)} cams/it")
 
@@ -1783,11 +1787,10 @@ class GaussianMapper(object):
             # Reuse last_call logic: align -> save ply (no metrics)
             aligned_gaussians = self.get_aligned_gaussians()
 
-            # Name: frame_<frame_id>_<mode>.ply
-            ply_path = f"{self.output}/mesh/frame_{int(frame_id):06d}_{self.mode}.ply"
-            aligned_gaussians.save_ply(ply_path)
-
-            self.info(f"[mesh-each-update] saved: {ply_path}")
+            if aligned_gaussians is not None:
+                ply_path = f"{self.output}/mesh/frame_{int(frame_id):06d}_{self.mode}.ply"
+                aligned_gaussians.save_ply(ply_path)
+                self.info(f"[mesh-each-update] saved: {ply_path}")
         except Exception as e:
             self.info(f"[mesh-each-update] failed on frame {frame_id}: {type(e).__name__}: {e}")
 
@@ -1932,6 +1935,9 @@ class GaussianMapper(object):
         # Use the 3DGS representation tied to SLAM xyz from get_current_gaussians().
         g, frame_slices, views = self.get_current_gaussians()
         self.gaussians = g
+
+        if not isinstance(g, GaussianModel):
+            return None
 
         # Ensure the global Sim(3) alignment has been estimated from SLAM/GT trajectories.
         self._compute_pose_alignment()
