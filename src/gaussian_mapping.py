@@ -1814,7 +1814,10 @@ class GaussianMapper(object):
         lr_opa = float(getattr(self.cfg.mapping, "frame_gaussians_lr_opa", 1e-5))
         views_per_iter = int(getattr(self.cfg.mapping, "frame_gaussians_views_per_iter", 10))
 
-        g, frame_slices, views = self.get_current_gaussians(window_size=win)
+        result = self.get_current_gaussians(window_size=win)
+        if not isinstance(result, tuple) or len(result) != 3 or len(result[1]) == 0:
+            return
+        g, frame_slices, views = result
 
         # -----------------------------
         # Optimize scale & rotation
@@ -1979,7 +1982,7 @@ class GaussianMapper(object):
 
         if window_size is not None:
             if len(kf_uids) == 0:
-                return []
+                return [], {}, []
             win_uids = kf_uids[-window_size:]
         else:
             win_uids = kf_uids
