@@ -276,19 +276,27 @@ def main():
         cv2.imwrite(sem_path, sem_xy_img)
         print(f"[INFO] Saved: {sem_path}")
 
-        # 类别图例
-        legend_h = n_classes * 20 + 10
-        legend = np.ones((legend_h, 200, 3), dtype=np.uint8) * 255
-        for i in range(n_classes):
-            y0 = 10 + i * 20
-            cv2.rectangle(legend, (10, y0), (30, y0 + 15), palette[i].tolist(), -1)
-            cv2.putText(legend, f"cls{i}", (40, y0 + 13),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
-        legend_path = os.path.join(args.output, "occ_sem_legend.png")
+        # 类别图例 (从 scannet_name.txt 读取)
+        name_file = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "src", "scannet_utils", "scannet_name.txt"
+        )
+        if os.path.exists(name_file):
+            with open(name_file) as f:
+                class_names = [l.strip() for l in f.readlines() if l.strip()]
+        else:
+            class_names = [f"class_{i}" for i in range(n_classes)]
+
+        legend_h = n_classes * 22 + 20
+        legend = np.ones((legend_h, 250, 3), dtype=np.uint8) * 255
+        for i in range(min(n_classes, len(class_names))):
+            y0 = 15 + i * 22
+            cv2.rectangle(legend, (10, y0), (40, y0 + 16), palette[i].tolist(), -1)
+            cv2.putText(legend, f"cls{i} {class_names[i]}", (55, y0 + 13),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1)
+        legend_path = os.path.join(args.output, "legend.png")
         cv2.imwrite(legend_path, legend)
-        print(f"[INFO] Saved legend: {legend_path}")
-        print(f"[INFO]   cls0=ceiling, cls1=floor, cls2=wall, cls3=window, cls4=chair")
-        print(f"[INFO]   cls5=bed, cls6=sofa, cls7=table, cls8=tv, cls9=furniture, cls10=objects")
+        print(f"[INFO] Saved: {legend_path}")
 
     print("[DONE]")
 
