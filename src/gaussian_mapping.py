@@ -1939,8 +1939,9 @@ class GaussianMapper(object):
         scene_data = self.gt_scene_data
         gt_occ_pts = self.gt_occ_pts  # Only kept for later visualization; Sim3 alignment uses poses only.
 
-        # Use the 3DGS representation tied to SLAM xyz from get_current_gaussians().
-        g, frame_slices, views = self.get_current_gaussians()
+        # 分批加载避免 CLIP 特征 OOM：每 15 帧一批
+        batch_size = 15 if self.store_clip_features else 0
+        g, frame_slices, views = self.get_current_gaussians(batch_size=batch_size)
         self.gaussians = g
 
         if not isinstance(g, GaussianModel):
@@ -1985,7 +1986,7 @@ class GaussianMapper(object):
 
         return final_aligned_gaussians
 
-    def get_current_gaussians(self, window_size=None):
+    def get_current_gaussians(self, window_size=None, batch_size=0):
         # -----------------------------
         # Choose window frames (prefer keyframes)
         # -----------------------------
@@ -2000,10 +2001,32 @@ class GaussianMapper(object):
         else:
             win_uids = kf_uids
 
-        # -----------------------------
-        # Refresh / build per-frame cached gaussians
-        #   - keep stable sampling via fg.mask (flatten pixel indices)
-        # -----------------------------
+        # 分批处理避免 OOM：每 batch_size 帧 flush 到 GaussianModel 再释放
+        if batch_size <= 0 or len(win_uids) <= batch_size:
+            return self._get_current_gaussians_batch(win_uids, None)
+
+        # 累积式：分批加载，逐步合并
+        merged_g = None
+        all_frame_slices = {}
+        all_views = []
+        g_offset = 0
+        for b_start in range(0, len(win_uids), batch_size):
+            b_uids = win_uids[b_start:b_start + batch_size]
+            g_part, slices_part, views_part = self._get_current_gaussians_batch(b_uids, merged_g)
+            if g_part is None:
+                continue
+            if merged_g is None:
+                merged_g = g_part
+            else:
+                merged_g = self._merge_gaussian_models(merged_g, g_part)
+            for uid, (s, e) in slices_part.items():
+                all_frame_slices[uid] = (s + g_offset, e + g_offset)
+            g_offset = len(merged_g)
+            all_views.extend(views_part)
+        return merged_g, all_frame_slices, all_views
+
+    def _get_current_gaussians_batch(self, win_uids, merged_g):
+        """处理一批帧，返回 (GaussianModel, frame_slices, views)."""
         frame_slices = {}  # uid -> (start, end)
         pts_all, rgb_all, sc_all, rot_all, op_all, feat_all = [], [], [], [], [], []
         ts_all = []
@@ -2232,3 +2255,15 @@ class GaussianMapper(object):
         g._view_ids = view_ids
         g.views = views
         return g, frame_slices, views
+
+    def _merge_gaussian_models(self, base, new):
+        """将 new 的 Gaussians 追加到 base 后面（原地修改 base）."""
+        base._xyz = torch.cat([base._xyz, new._xyz], dim=0)
+        base._features_dc = torch.cat([base._features_dc, new._features_dc], dim=0)
+        base._features_rest = torch.cat([base._features_rest, new._features_rest], dim=0)
+        base._scaling = torch.cat([base._scaling, new._scaling], dim=0)
+        base._rotation = torch.cat([base._rotation, new._rotation], dim=0)
+        base._opacity = torch.cat([base._opacity, new._opacity], dim=0)
+        if hasattr(base, "ov_feat") and base.ov_feat is not None:
+            base.ov_feat = torch.cat([base.ov_feat, new.ov_feat], dim=0)
+        return base
