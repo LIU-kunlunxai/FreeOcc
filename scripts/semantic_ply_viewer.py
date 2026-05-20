@@ -37,7 +37,7 @@ def main():
 
     # 读类名
     name_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "src", "scannet_utils", "scannet_name.txt")
+                             "src", "scannet_utils", "kunlunxai_name.txt")
     if os.path.exists(name_file):
         with open(name_file) as f:
             class_names = [l.strip() for l in f if l.strip()]

@@ -51,6 +51,7 @@ python run.py \
   data.cam.cy=241.840 \
   data.png_depth_scale=1000.0 \
   mapping.ov_name_path=./src/scannet_utils/kunlunxai_name.txt \
+  mapping.store_clip_features=True \
   mapping.loss.supervise_with_prior=False \
   mapping.online_opt.filter.bin_th=0.02 \
   mapping.online_opt.filter.uncertainty=True \
@@ -80,6 +81,18 @@ python /root/workspace/FreeOcc/scripts/occ_from_ply.py \
   --thr 0.15 \
   --max-gaussians 300000
 
+# Step 3: 语义高斯点云 (3D 可视化用)
+echo ""
+echo "============================================"
+echo "Step 3/3: Semantic Gaussian PLY for 3D viewer"
+echo "============================================"
+
+SEM_PLY="$OUTPUT_ROOT/mesh/gaussians_sem_label.ply"
+python /root/workspace/FreeOcc/scripts/semantic_ply_viewer.py \
+  --input "$PLY" \
+  --output "$SEM_PLY" \
+  --max-points 300000
+
 echo ""
 echo "============================================"
 echo "Done!"
@@ -87,5 +100,6 @@ echo "============================================"
 echo "Output: $OUTPUT_ROOT/"
 echo ""
 echo "  PLY:       $PLY"
+echo "  Sem PLY:   $SEM_PLY"
 echo "  Occupancy: $OCC_OUTPUT/"
-ls -la "$OCC_OUTPUT/"*.png "$OCC_OUTPUT/"*.ply 2>/dev/null || true
+ls -la "$OCC_OUTPUT/"*.png "$OCC_OUTPUT/"*.ply "$SEM_PLY" 2>/dev/null || true

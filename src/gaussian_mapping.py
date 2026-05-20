@@ -639,7 +639,9 @@ class GaussianMapper(object):
         self.align_t = None           # 3D translation vector, torch.Tensor
 
         self.ov_name_path = getattr(self.cfg.mapping, "ov_name_path", "./src/scannet_utils/scannet_name.txt")
-        
+        self.store_clip_features = bool(getattr(self.cfg.mapping, "store_clip_features", False))
+        if self.store_clip_features:
+            self.info("STORING RAW CLIP FEATURES (open-vocabulary mode)")
 
         # --- GUI incremental mesh export (save aligned semantic gaussians per update) ---
         self.save_mesh_each_update = bool(getattr(self.cfg.mapping, "save_mesh_each_update", False))
@@ -1332,7 +1334,12 @@ class GaussianMapper(object):
         seg_logits = self.ov_model.predict(
             image, data_samples=None, **kwargs)
         return seg_logits
-    
+
+    def get_clip_pred(self, image):
+        """返回原始 CLIP 特征 (512/768-dim)，用于开集查询."""
+        assert image.shape[1] >= 256 and image.shape[2] >= 256, 'min 256x256'
+        return self.ov_model.get_clip_features(image)
+
     def _estimate_sim3_from_points(self, pred_pts: np.ndarray, gt_pts: np.ndarray):
         """
         Estimate the Sim(3) transform (s,R,t) with the Umeyama algorithm:
@@ -2009,24 +2016,28 @@ class GaussianMapper(object):
             fg.cuda()
             color, depth, depth_prior, intrinsics, w2c_lie, stat_mask, _ts = self.video.get_mapping_item(uid, device=self.device)
 
-            # --- OV logits cache per uid ---
+            # --- OV features cache per uid ---
             if fg.ov_feat is None:
                 if uid in self.ov_cache:
                     fg.ov_feat = self.ov_cache[uid].to(self.device, non_blocking=True)
                 else:
                     with torch.no_grad():
-                        logits = self.get_ov_pred(color)[0].detach()   # [C,H,W] on GPU
-                    self.ov_cache[uid] = logits.cpu()                 # store on CPU
-                    fg.ov_feat = logits                               # keep on GPU for this call
+                        if self.store_clip_features:
+                            feat = self.get_clip_pred(color)[0].detach()
+                        else:
+                            feat = self.get_ov_pred(color)[0].detach()
+                    self.ov_cache[uid] = feat.cpu()
+                    fg.ov_feat = feat
 
-            # --- NEW: label cache per uid (cheap) ---
-            if not hasattr(self, "ov_label_cache"):
-                self.ov_label_cache = {}
+            # --- label cache per uid (only for class-logit mode) ---
+            if not self.store_clip_features:
+                if not hasattr(self, "ov_label_cache"):
+                    self.ov_label_cache = {}
 
-            if uid not in self.ov_label_cache:
-                with torch.no_grad():
-                    label = fg.ov_feat.argmax(dim=0)  # [H,W] on GPU
-                self.ov_label_cache[uid] = label.to(torch.long).cpu()
+                if uid not in self.ov_label_cache:
+                    with torch.no_grad():
+                        label = fg.ov_feat.argmax(dim=0)  # [H,W] on GPU
+                    self.ov_label_cache[uid] = label.to(torch.long).cpu()
 
             ts_all.append(_ts)
 

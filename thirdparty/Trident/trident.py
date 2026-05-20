@@ -210,6 +210,61 @@ class Trident(BaseSegmentor):
         logits = F.interpolate(logits, size=ori_shape, mode='bilinear')
         return logits.float()
 
+    @torch.no_grad()
+    def get_clip_features(self, src_img):
+        """返回原始 CLIP 特征 (dinovh/ViT-B/16 = 768-dim)，用于开集查询.
+        Returns: [C, H, W] float32 tensor on same device as src_img.
+        """
+        clip_patch = self.clip.visual.patch_size
+        if isinstance(clip_patch, tuple):
+            clip_patch = clip_patch[0]
+        stride = clip_patch
+
+        ori_shape = src_img.shape[1:]
+
+        img_tensor = src_img / 255.0
+        img_tensor = img_tensor - torch.Tensor([0.48145466, 0.4578275, 0.40821073]).view(3,1,1).to(img_tensor)
+        img_tensor = img_tensor / torch.Tensor([0.26862954, 0.26130258, 0.27577711]).view(3,1,1).to(img_tensor)
+        img_tensor = img_tensor[None]
+
+        tmp_img = src_img.permute(1,2,0).cpu().numpy()
+        tmp_h, tmp_w = tmp_img.shape[:2]
+        if tmp_h % stride != 0: tmp_h = (tmp_h // stride + 1) * stride
+        if tmp_w % stride != 0: tmp_w = (tmp_w // stride + 1) * stride
+        tmp_img = cv2.resize(tmp_img, (tmp_w, tmp_h))
+
+        sam_enc_feats, sam_attn, sam_v, sam_valid_h, sam_valid_w = self.get_sam_feat(tmp_img, 16)
+
+        processed_img = preprocess_image(img_tensor, stride, self.slide_crop)
+        clip_whole_h, clip_whole_w = processed_img.shape[-2:]
+        clip_feat_h, clip_feat_w = clip_whole_h // stride, clip_whole_w // stride
+        img_batch, paddings, patch_locs, win_sizes = self.get_windowed_imgs(processed_img, stride)
+
+        imgs_norm = [self.norm(self.unnorm(img_batch[i])) for i in range(len(img_batch))]
+        imgs_norm = torch.stack(imgs_norm, dim=0).half()
+
+        if self.vfm_model == 'dino':
+            self.vfm._modules["blocks"][-1]._modules["attn"]._modules["qkv"].register_forward_hook(
+                lambda m, i, o: None)
+
+        patch_size = self.vfm.patch_embed.patch_size
+        if type(patch_size) is tuple: patch_size = patch_size[0]
+        feat = self.vfm.get_intermediate_layers(imgs_norm)[0]
+        nb_im = feat.shape[0]
+        vfm_h, vfm_w = imgs_norm[0].shape[-2] // patch_size, imgs_norm[0].shape[-1] // patch_size
+        vfm_feats = feat[:, 1:, :].reshape(nb_im, vfm_h, vfm_w, -1).permute(0, 3, 1, 2)
+
+        clip_features = self.clip.encode_image(
+            img_batch.half(), external_feats=vfm_feats, beta=self.beta, gamma=self.gamma,
+            paddings=paddings, dst_coords=patch_locs, win_sizes=win_sizes,
+            dst_vh=clip_feat_h, dst_vw=clip_feat_w, sam_attn=sam_attn, sam_v=sam_v,
+            cos_fac=self.cos_fac, vfm_token_size=(vfm_h, vfm_w), refine_neg_cos=self.refine_neg_cos)
+        # 归一化后直接返回（不乘 query_features）
+        clip_features = clip_features / clip_features.norm(dim=-1, keepdim=True)
+        clip_features = clip_features.permute(0, 2, 1).reshape(-1, clip_features.shape[-1], sam_valid_h, sam_valid_w)
+        clip_features = F.interpolate(clip_features, size=ori_shape, mode='bilinear')
+        return clip_features.float()
+
     def get_windowed_imgs(self, img, patch_size=16):
         stride, crop_size = self.slide_stride, self.slide_crop
         if type(img) == list:
