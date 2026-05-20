@@ -1939,8 +1939,8 @@ class GaussianMapper(object):
         scene_data = self.gt_scene_data
         gt_occ_pts = self.gt_occ_pts  # Only kept for later visualization; Sim3 alignment uses poses only.
 
-        # 分批加载避免 CLIP 特征 OOM：每 15 帧一批
-        batch_size = 15 if self.store_clip_features else 0
+        # 分批加载避免 CLIP 特征 OOM：每 10 帧一批
+        batch_size = 10 if self.store_clip_features else 0
         g, frame_slices, views = self.get_current_gaussians(batch_size=batch_size)
         self.gaussians = g
 
@@ -2019,6 +2019,7 @@ class GaussianMapper(object):
                 merged_g = g_part
             else:
                 merged_g = self._merge_gaussian_models(merged_g, g_part)
+                del g_part; torch.cuda.empty_cache()
             for uid, (s, e) in slices_part.items():
                 all_frame_slices[uid] = (s + g_offset, e + g_offset)
             g_offset = merged_g._surface_xyz.shape[0] if merged_g.use_surface_points else merged_g._xyz.shape[0]
