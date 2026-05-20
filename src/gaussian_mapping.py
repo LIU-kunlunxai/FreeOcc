@@ -2271,7 +2271,14 @@ class GaussianMapper(object):
         base._rotation = torch.cat([base._rotation, new._rotation], dim=0)
         base._opacity = torch.cat([base._opacity, new._opacity], dim=0)
         if hasattr(base, "ov_feat") and base.ov_feat is not None:
-            base.ov_feat = torch.cat([base.ov_feat, new.ov_feat], dim=0)
+            # 大张量合并走 CPU 避免 GPU OOM：先搬 CPU，释放 GPU，合并后再搬回
+            dev = base.ov_feat.device
+            b_cpu = base.ov_feat.cpu(); n_cpu = new.ov_feat.cpu()
+            del base.ov_feat; del new.ov_feat
+            merged = torch.cat([b_cpu, n_cpu], dim=0)
+            del b_cpu, n_cpu
+            base.ov_feat = merged.to(dev); del merged
+            torch.cuda.empty_cache()
         # 合并 views 和 _view_ids
         if hasattr(base, "views") and hasattr(new, "views"):
             offset = len(base.views)
