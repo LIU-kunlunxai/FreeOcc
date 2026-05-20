@@ -1981,8 +1981,12 @@ class GaussianMapper(object):
         final_aligned_gaussians._scaling = final_aligned_gaussians.scaling_inverse_activation(scale_aligned)
         final_aligned_gaussians._rotation = rotation_aligned_q
         final_aligned_gaussians._opacity = final_aligned_gaussians.inverse_opacity_activation(opacity)
-        final_aligned_gaussians._features_dc = g._features_dc
-        final_aligned_gaussians.ov_feat = semantics
+        final_aligned_gaussians._features_dc = g._features_dc.detach().clone()
+        final_aligned_gaussians.ov_feat = semantics.detach().clone()
+
+        # 释放原模型避免 GPU OOM（语义张量 3GB+）
+        del g, semantics
+        torch.cuda.empty_cache()
 
         return final_aligned_gaussians
 
