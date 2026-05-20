@@ -263,7 +263,7 @@ class Trident(BaseSegmentor):
             cos_fac=self.cos_fac, vfm_token_size=(vfm_h, vfm_w), refine_neg_cos=self.refine_neg_cos)
         clip_features = clip_features / clip_features.norm(dim=-1, keepdim=True)
         clip_features = clip_features.permute(0, 2, 1).reshape(-1, clip_features.shape[-1], sam_valid_h, sam_valid_w)
-        clip_features = F.interpolate(clip_features, size=ori_shape, mode='bilinear')
+        # 不插值到全分辨率 — strided 特征 (≈H/16×W/16)，每帧 2.5MB 而非 630MB
         return clip_features.float()
 
     def get_windowed_imgs(self, img, patch_size=16):
