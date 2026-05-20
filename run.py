@@ -183,8 +183,14 @@ def run_slam(cfg):
 
     setup_seed(43)
     torch.multiprocessing.set_start_method("spawn")
-    # Save state for reproducibility
-    backup_source_code(os.path.join(output_folder, "code"))
+    # 写 git commit id 替代源码备份
+    import subprocess
+    try:
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, timeout=5).strip()
+        with open(os.path.join(output_folder, "commit.txt"), "w") as f:
+            f.write(commit + "\n")
+    except Exception:
+        pass
 
     sys_print(f"\n\n** Running {cfg.data.input_folder} in {cfg.mode} mode!!! **\n\n")
 

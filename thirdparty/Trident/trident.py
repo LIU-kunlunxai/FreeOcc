@@ -188,8 +188,9 @@ class Trident(BaseSegmentor):
         feat_out = {}
         def hook_fn_forward_qkv(module, input, output):
             feat_out["qkv"] = output
+        handle = None
         if self.vfm_model == 'dino':
-            self.vfm._modules["blocks"][-1]._modules["attn"]._modules["qkv"].register_forward_hook(
+            handle = self.vfm._modules["blocks"][-1]._modules["attn"]._modules["qkv"].register_forward_hook(
                 hook_fn_forward_qkv)
         # Forward pass in the model
         patch_size = self.vfm.patch_embed.patch_size
@@ -204,6 +205,8 @@ class Trident(BaseSegmentor):
                                                dst_vh=clip_feat_h, dst_vw=clip_feat_w, sam_attn=sam_attn, sam_v=sam_v,
                                                cos_fac=self.cos_fac, vfm_token_size = (vfm_h, vfm_w),
                                                refine_neg_cos=self.refine_neg_cos)
+        if handle is not None:
+            handle.remove()
         clip_features /= clip_features.norm(dim=-1, keepdim=True)
         logits = (clip_features) @ self.query_features.T #BLC
         logits = logits.permute(0, 2, 1).reshape(-1, logits.shape[-1], sam_valid_h, sam_valid_w) #B, C, H, W
@@ -243,9 +246,8 @@ class Trident(BaseSegmentor):
         imgs_norm = [self.norm(self.unnorm(img_batch[i])) for i in range(len(img_batch))]
         imgs_norm = torch.stack(imgs_norm, dim=0).half()
 
-        if self.vfm_model == 'dino':
-            self.vfm._modules["blocks"][-1]._modules["attn"]._modules["qkv"].register_forward_hook(
-                lambda m, i, o: None)
+        # NOTE: 不用注册 hook (get_clip_features 不需要 QKV 特征)
+        # 原 get_trident_seg 里的 hook 用于输出注意力，这里跳过
 
         patch_size = self.vfm.patch_embed.patch_size
         if type(patch_size) is tuple: patch_size = patch_size[0]
@@ -259,7 +261,6 @@ class Trident(BaseSegmentor):
             paddings=paddings, dst_coords=patch_locs, win_sizes=win_sizes,
             dst_vh=clip_feat_h, dst_vw=clip_feat_w, sam_attn=sam_attn, sam_v=sam_v,
             cos_fac=self.cos_fac, vfm_token_size=(vfm_h, vfm_w), refine_neg_cos=self.refine_neg_cos)
-        # 归一化后直接返回（不乘 query_features）
         clip_features = clip_features / clip_features.norm(dim=-1, keepdim=True)
         clip_features = clip_features.permute(0, 2, 1).reshape(-1, clip_features.shape[-1], sam_valid_h, sam_valid_w)
         clip_features = F.interpolate(clip_features, size=ori_shape, mode='bilinear')
