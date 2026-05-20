@@ -2043,7 +2043,16 @@ class GaussianMapper(object):
 
             color = color[:, ::self.stride, ::self.stride]
             depth = depth[::self.stride, ::self.stride]
-            feat = fg.ov_feat[:, ::self.stride, ::self.stride]
+
+            # CLIP 特征临时上采样到 color 分辨率，保证 valid mask 索引对齐
+            feat_raw = fg.ov_feat[:, ::self.stride, ::self.stride]
+            if self.store_clip_features and feat_raw.shape[-2:] != depth.shape[-2:]:
+                feat = torch.nn.functional.interpolate(
+                    feat_raw.unsqueeze(0),
+                    size=depth.shape[-2:], mode='bilinear', align_corners=False
+                ).squeeze(0)
+            else:
+                feat = feat_raw
 
             # pick depth source
             d = depth
