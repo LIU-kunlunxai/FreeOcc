@@ -129,6 +129,7 @@ def main():
     parser.add_argument("--scale-multiplier", type=float, default=3.0)
     parser.add_argument("--radii-min", type=int, default=1)
     parser.add_argument("--bbox-margin", type=float, default=0.5, help="bbox 扩展边距 (m)")
+    parser.add_argument("--save-features", default=None, help="保存体素级 CLIP 特征 (.pickle)")
     args = parser.parse_args()
 
     os.makedirs(args.output, exist_ok=True)
@@ -297,6 +298,23 @@ def main():
         legend_path = os.path.join(args.output, "legend.png")
         cv2.imwrite(legend_path, legend)
         print(f"[INFO] Saved: {legend_path}")
+
+    # ── 8. 保存体素级 CLIP 特征 (用于在线开集查询) ──
+    if args.save_features:
+        import pickle
+        feat_3d = logits_sem_3d.cpu().numpy()  # [H, W, D, C]
+        feats_occ = feat_3d[occ_mask]           # [N_occ, C]
+        data = {
+            "features": feats_occ.astype(np.float16),
+            "centers": occ_pts_np.astype(np.float32),
+            "grid_size": args.grid_size,
+            "dims": (H, W, D),
+            "bbox_min": lo.cpu().numpy().astype(np.float32),
+        }
+        with open(args.save_features, "wb") as f:
+            pickle.dump(data, f)
+        mb = os.path.getsize(args.save_features) / 1024 / 1024
+        print(f"[INFO] Voxel features saved: {args.save_features} ({mb:.1f} MB, {feats_occ.shape})")
 
     print("[DONE]")
 
