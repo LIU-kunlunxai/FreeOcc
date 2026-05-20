@@ -51,7 +51,7 @@ python run.py \
   data.cam.cy=241.840 \
   data.png_depth_scale=1000.0 \
   mapping.ov_name_path=./src/scannet_utils/kunlunxai_name.txt \
-  +mapping.store_clip_features=True \
+  mapping.store_clip_features=True \
   mapping.loss.supervise_with_prior=False \
   mapping.online_opt.filter.bin_th=0.02 \
   mapping.online_opt.filter.uncertainty=True \
