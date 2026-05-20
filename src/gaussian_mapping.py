@@ -2021,7 +2021,7 @@ class GaussianMapper(object):
                 merged_g = self._merge_gaussian_models(merged_g, g_part)
             for uid, (s, e) in slices_part.items():
                 all_frame_slices[uid] = (s + g_offset, e + g_offset)
-            g_offset = len(merged_g)
+            g_offset = merged_g._surface_xyz.shape[0] if merged_g.use_surface_points else merged_g._xyz.shape[0]
             all_views.extend(views_part)
         return merged_g, all_frame_slices, all_views
 
@@ -2272,4 +2272,11 @@ class GaussianMapper(object):
         base._opacity = torch.cat([base._opacity, new._opacity], dim=0)
         if hasattr(base, "ov_feat") and base.ov_feat is not None:
             base.ov_feat = torch.cat([base.ov_feat, new.ov_feat], dim=0)
+        # 合并 views 和 _view_ids
+        if hasattr(base, "views") and hasattr(new, "views"):
+            offset = len(base.views)
+            if hasattr(base, "_view_ids") and hasattr(new, "_view_ids"):
+                new_vids = new._view_ids + offset
+                base._view_ids = torch.cat([base._view_ids, new_vids], dim=0)
+            base.views.extend(new.views)
         return base
