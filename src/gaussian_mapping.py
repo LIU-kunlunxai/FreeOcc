@@ -2258,7 +2258,13 @@ class GaussianMapper(object):
 
     def _merge_gaussian_models(self, base, new):
         """将 new 的 Gaussians 追加到 base 后面（原地修改 base）."""
-        base._xyz = torch.cat([base._xyz, new._xyz], dim=0)
+        base_xyz = base.get_xyz
+        new_xyz = new.get_xyz
+        merged_xyz = torch.cat([base_xyz, new_xyz], dim=0)
+        if base.use_surface_points:
+            base._surface_xyz = nn.Parameter(merged_xyz, requires_grad=False)
+        else:
+            base._xyz = merged_xyz
         base._features_dc = torch.cat([base._features_dc, new._features_dc], dim=0)
         base._features_rest = torch.cat([base._features_rest, new._features_rest], dim=0)
         base._scaling = torch.cat([base._scaling, new._scaling], dim=0)
