@@ -1,7 +1,7 @@
 #!/bin/bash
 # FreeOcc 一键运行脚本
 # 用法: bash run_freeocc.sh /path/to/dataset
-set -euo pipefail
+set -eo pipefail
 
 DATA_DIR="${1:?用法: bash run_freeocc.sh /path/to/dataset}"
 

@@ -847,18 +847,18 @@ class GaussianModel:
             if ov_feat.ndim == 1:
                 ov_feat = ov_feat[:, None]  # (P,1)
 
-        dtype_full = [(attribute, "f4") for attribute in self.construct_list_of_attributes()]
-        elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        # attributes = np.concatenate((xyz, normals, f_dc, f_rest, opacities, scale, rotation), axis=1)
-        # attributes = np.concatenate((xyz, normals, f_dc, opacities, scale, rotation), axis=1)
+        attr_names = self.construct_list_of_attributes()
         parts = [xyz, normals, f_dc, opacities, scale, rotation]
         if ov_feat is not None:
             parts.append(ov_feat)
+        attributes = np.concatenate(parts, axis=1)
 
-        attributes = np.concatenate(parts, axis=1).astype(np.float32)
-        elements[:] = list(map(tuple, attributes))
-        el = PlyElement.describe(elements, "vertex")
-        PlyData([el]).write(path)
+        dtype_full = np.dtype([(n, "f4") for n in attr_names])
+        data = np.empty(xyz.shape[0], dtype=dtype_full)
+        for i, n in enumerate(attr_names):
+            data[n] = attributes[:, i]
+        el = PlyElement.describe(data, "vertex")
+        PlyData([el]).write(path, text=False)
 
     def load_ply(self, path):
         plydata = PlyData.read(path)
