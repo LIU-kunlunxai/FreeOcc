@@ -20,12 +20,14 @@ class Instance:
 
 
 class SemanticQuery:
-    def __init__(self, ply_path: str, name_file: str = "src/scannet_utils/kunlunxai_name.txt"):
+    def __init__(self, ply_path: str, name_file: str = "src/scannet_utils/kunlunxai_name.txt",
+                 conf_threshold: float = 0.0):
         with open(name_file) as f:
             self.names = [l.strip() for l in f if l.strip()]
         ply = PlyData.read(ply_path)
         v = ply["vertex"].data
         self.xyz = np.stack([v["x"], v["y"], v["z"]], axis=1)
+        self.conf_threshold = conf_threshold
         self._load_labels(v)
 
     def _load_labels(self, v):
@@ -34,6 +36,9 @@ class SemanticQuery:
         if ov_keys:
             ov = np.stack([v[k] for k in ov_keys], axis=1)
             self.labels = np.argmax(ov, axis=1)
+            if self.conf_threshold > 0:
+                scores = ov.max(axis=1)
+                self.labels[scores < self.conf_threshold] = -1  # 不确定
         else:
             import cv2
             rgb = np.stack([v["red"], v["green"], v["blue"]], axis=1).astype(np.uint8)
@@ -53,7 +58,8 @@ class SemanticQuery:
         return list(enumerate(self.names))
 
     def query(self, cls_name: str, near_name: Optional[str] = None,
-              proximity: float = 1.5, eps: float = 0.3, min_samples: int = 5
+              proximity: float = 1.5, eps: float = 0.3, min_samples: int = 5,
+              min_voxels: int = 50
               ) -> List[Instance]:
         """查询指定类别的实例，可选空间过滤"""
         from sklearn.cluster import DBSCAN
@@ -69,6 +75,8 @@ class SemanticQuery:
             if cid == -1:
                 continue
             c_pts = pts[cluster.labels_ == cid]
+            if len(c_pts) < min_voxels:
+                continue
             instances.append(Instance(
                 cls_id=cls_idx, cls_name=self.names[cls_idx],
                 pts=c_pts, center=c_pts.mean(axis=0), n_voxels=len(c_pts)

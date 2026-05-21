@@ -5,10 +5,7 @@ door
 floor
 pillar
 carpet
-switch
 table
 wall
-wall-plug
 window
-person
 water-dispenser
