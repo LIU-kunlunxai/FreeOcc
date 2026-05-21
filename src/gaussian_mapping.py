@@ -1950,7 +1950,9 @@ class GaussianMapper(object):
         # Ensure the global Sim(3) alignment has been estimated from SLAM/GT trajectories.
         self._compute_pose_alignment()
 
+        print("[对齐] 计算高斯坐标...", flush=True)
         xyz = g.get_xyz                            # [N,3], currently in the SLAM world frame
+        print(f"[对齐] 完成, {xyz.shape[0]} 高斯", flush=True)
         rotation = quaternion_to_matrix(g.get_rotation)
         R_a = self.align_R.to(rotation)                   # [3,3]
         rotation_aligned = R_a.unsqueeze(0) @ rotation    # [N,3,3]
@@ -1982,7 +1984,9 @@ class GaussianMapper(object):
         final_aligned_gaussians._rotation = rotation_aligned_q
         final_aligned_gaussians._opacity = final_aligned_gaussians.inverse_opacity_activation(opacity)
         final_aligned_gaussians._features_dc = g._features_dc.detach().clone()
+        print("[对齐] 保存语义特征...", flush=True)
         final_aligned_gaussians.ov_feat = semantics.detach().clone()
+        print("[对齐] 完成, 释放内存...", flush=True)
 
         # 释放原模型避免 GPU OOM（语义张量 3GB+）
         del g, semantics
@@ -2014,8 +2018,10 @@ class GaussianMapper(object):
         all_frame_slices = {}
         all_views = []
         g_offset = 0
-        for b_start in range(0, len(win_uids), batch_size):
+        n_batches = (len(win_uids) + batch_size - 1) // batch_size
+        for bi, b_start in enumerate(range(0, len(win_uids), batch_size)):
             b_uids = win_uids[b_start:b_start + batch_size]
+            print(f"[合并] {bi+1}/{n_batches} 批, 帧 {b_uids[0]}-{b_uids[-1]} ...", flush=True)
             g_part, slices_part, views_part = self._get_current_gaussians_batch(b_uids, merged_g)
             if g_part is None:
                 continue
@@ -2028,6 +2034,7 @@ class GaussianMapper(object):
                 all_frame_slices[uid] = (s + g_offset, e + g_offset)
             g_offset = merged_g._surface_xyz.shape[0] if merged_g.use_surface_points else merged_g._xyz.shape[0]
             all_views.extend(views_part)
+            print(f"[合并] {bi+1}/{n_batches} 完成, 累计 {g_offset} 高斯", flush=True)
         return merged_g, all_frame_slices, all_views
 
     def _get_current_gaussians_batch(self, win_uids, merged_g):
