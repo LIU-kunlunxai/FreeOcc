@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """多段 PLY 合并到统一语义占用体素中，支持离线建图 + 在线查询。"""
 
-import argparse, os, sys, pickle, numpy as np, torch
+import argparse, gc, os, sys, pickle, numpy as np, torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plyfile import PlyData
