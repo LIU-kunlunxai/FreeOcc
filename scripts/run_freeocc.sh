@@ -5,7 +5,7 @@ set -eo pipefail
 
 DATA_DIR="${1:?用法: bash run_freeocc.sh /path/to/dataset}"
 
-source /home/vipuser/miniconda3/etc/profile.d/conda.sh
+source /home/hello/miniconda3/etc/profile.d/conda.sh
 conda activate freeocc
 cd /root/workspace/FreeOcc
 
