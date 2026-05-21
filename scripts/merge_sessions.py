@@ -55,26 +55,21 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Device: {device}")
 
-    # 1. 加载所有 PLY 高斯
-    all_xyz, all_sc, all_cov, all_opa, all_sem = [], [], [], [], []
-    total = 0
+    # 1. 扫描所有 PLY 的 XYZ 获取全局 bbox (只读坐标, 轻量)
+    print("[1/3] Scanning bbox...")
+    lo_all, hi_all = [], []
     for p in args.plies:
-        xyz, sc, cov, opa, sem, n = load_gs_from_ply(p, device)
-        print(f"  {p}: {n} Gaussians")
-        all_xyz.append(xyz); all_sc.append(sc); all_cov.append(cov)
-        all_opa.append(opa); all_sem.append(sem)
-        total += n
+        xyz, _, _, _, _, n = load_gs_from_ply(p, device)
+        lo_all.append(torch.quantile(xyz, 0.01, dim=0))
+        hi_all.append(torch.quantile(xyz, 0.99, dim=0))
+        del xyz; torch.cuda.empty_cache()
+        print(f"  {os.path.basename(p)}: {n} Gaussians")
 
-    xyz = torch.cat(all_xyz); scales = torch.cat(all_sc); cov = torch.cat(all_cov)
-    opa = torch.cat(all_opa); sem = torch.cat(all_sem) if all_sem[0] is not None else None
-    print(f"  Total: {total} Gaussians")
-
-    # 2. 全局 bbox
-    lo = torch.quantile(xyz, 0.01, dim=0) - 0.5
-    hi = torch.quantile(xyz, 0.99, dim=0) + 0.5
+    lo = torch.stack(lo_all).min(dim=0).values - 0.5
+    hi = torch.stack(hi_all).max(dim=0).values + 0.5
     print(f"  BBox: [{lo.tolist()} → {hi.tolist()}]")
 
-    # 3. 构建体素网格
+    # 2. 构建体素网格
     bsz = hi - lo
     H = int((bsz[0]/args.grid_size).ceil()) + 1
     W = int((bsz[1]/args.grid_size).ceil()) + 1
@@ -88,26 +83,40 @@ def main():
     pts = torch.stack([X, Y, Z], dim=-1) * args.grid_size + lo[None,None,None,:]
     pts = pts.reshape(-1, 3)
 
-    # 4. 过滤 bbox 内的高斯
-    m = (xyz[:,0]>=lo[0])&(xyz[:,0]<=hi[0])&(xyz[:,1]>=lo[1])&(xyz[:,1]<=hi[1])&(xyz[:,2]>=lo[2])&(xyz[:,2]<=hi[2])
-    xyz_f, sc_f, cov_f, opa_f = xyz[m], scales[m], cov[m], opa[m]
-    sem_f = sem[m] if sem is not None else None
-    print(f"  Gaussians in bbox: {m.sum().item()}")
+    # 3. 逐 PLY 投影, 累积密度和特征
+    print("[2/3] Processing PLYs one-by-one...")
+    density_acc = torch.zeros(H*W*D, device=device)
+    logits_acc = None
 
-    # 5. LocalAggregator 投影
-    agg = LocalAggregator(scale_multiplier=3.0, H=H, W=W, D=D,
-                          pc_min=lo.cpu().tolist(), grid_size=args.grid_size,
-                          radii_min=1).to(device)
+    for pi, p in enumerate(args.plies):
+        print(f"  [{pi+1}/{len(args.plies)}] {os.path.basename(p)}")
+        xyz, sc, cov, opa, sem, n = load_gs_from_ply(p, device)
+        # bbox 过滤
+        m = (xyz[:,0]>=lo[0])&(xyz[:,0]<=hi[0])&(xyz[:,1]>=lo[1])&(xyz[:,1]<=hi[1])&(xyz[:,2]>=lo[2])&(xyz[:,2]<=hi[2])
+        xyz_f, sc_f, cov_f, opa_f = xyz[m], sc[m], cov[m], opa[m]
+        sem_f = sem[m] if sem is not None else None
 
-    with torch.no_grad():
-        logits, bin_logits, density = agg(
-            pts=pts.unsqueeze(0), means3D=xyz_f.unsqueeze(0),
-            opas=opa_f.unsqueeze(0),
-            semantics=sem_f.unsqueeze(0) if sem_f is not None else torch.ones(1, xyz_f.shape[0], 1, device=device),
-            scales=sc_f.unsqueeze(0), cov3D=cov_f.unsqueeze(0),
-            metas=None, origin_use=lo)
+        agg = LocalAggregator(scale_multiplier=3.0, H=H, W=W, D=D,
+                              pc_min=lo.cpu().tolist(), grid_size=args.grid_size,
+                              radii_min=1).to(device)
 
-    occ_3d = 1.0 - torch.exp(-density.reshape(H, W, D))
+        with torch.no_grad():
+            logits, _, density = agg(
+                pts=pts.unsqueeze(0), means3D=xyz_f.unsqueeze(0),
+                opas=opa_f.unsqueeze(0),
+                semantics=sem_f.unsqueeze(0) if sem_f is not None else torch.ones(1, xyz_f.shape[0], 1, device=device),
+                scales=sc_f.unsqueeze(0), cov3D=cov_f.unsqueeze(0),
+                metas=None, origin_use=lo)
+
+        density_acc += density
+        if sem_f is not None:
+            logits_acc = logits if logits_acc is None else logits_acc + logits
+
+        del xyz, sc, cov, opa, sem, xyz_f, sc_f, cov_f, opa_f, sem_f, agg
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    occ_3d = 1.0 - torch.exp(-density_acc.reshape(H, W, D))
     occ_np = occ_3d.cpu().numpy()
 
     # 6. 保存
@@ -132,9 +141,8 @@ def main():
     print(f"  Saved: {args.output}")
 
     # 7. 导出体素语义特征 (用于在线开集查询)
-    if args.feat_out and sem_f is not None:
-        # logits: [1, H*W*D, C]
-        logits_3d = logits.reshape(H, W, D, -1).cpu().numpy()
+    if args.feat_out and logits_acc is not None:
+        logits_3d = logits_acc.reshape(H, W, D, -1).cpu().numpy()
         feats_occ = logits_3d[mask]  # [N_occ, C]
         data = {
             "features": feats_occ.astype(np.float16),

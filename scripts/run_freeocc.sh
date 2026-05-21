@@ -78,7 +78,6 @@ FEAT_CACHE="$OCC_OUTPUT/voxel_features.pkl"
 PLY_LIST=$(ls "$OUTPUT_ROOT/mesh"/final_rgbd_*.ply 2>/dev/null || true)
 
 if [ -n "$PLY_LIST" ]; then
-  # 多 PLY 模式: merge_sessions.py 直接投体素
   echo "Found windowed PLYs: $(echo "$PLY_LIST" | wc -l) files"
   python "$FREEOC_DIR/scripts/merge_sessions.py" \
     --plies $PLY_LIST \
