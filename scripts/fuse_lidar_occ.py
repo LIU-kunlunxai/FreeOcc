@@ -44,6 +44,7 @@ def main():
     parser.add_argument("--lidar", required=True, help="LiDAR 全局地图 (PCD/PLY)")
     parser.add_argument("--occ", required=True, help="FreeOcc 语义体素 PLY")
     parser.add_argument("--output", required=True, help="输出融合 PLY")
+    parser.add_argument("--transform", default=None, help="4x4 变换矩阵 (occ→lidar坐标系)")
     parser.add_argument("--radius", type=float, default=0.3, help="匹配半径 (m)")
     parser.add_argument("--max-points", type=int, default=500000)
     args = parser.parse_args()
@@ -62,6 +63,13 @@ def main():
     occ_colors = np.stack([ply["vertex"]["red"], ply["vertex"]["green"],
                            ply["vertex"]["blue"]], axis=1)  # (M, 3) uint8
     print(f"  {len(occ_voxels)} voxels")
+
+    # 2.5 坐标变换
+    if args.transform:
+        T = np.loadtxt(args.transform)
+        occ_voxels_h = np.hstack([occ_voxels, np.ones((len(occ_voxels), 1))])
+        occ_voxels = (T @ occ_voxels_h.T).T[:, :3].astype(np.float32)
+        print(f"  Transformed via {args.transform}")
 
     # 3. 用 KD-Tree 匹配：每个 LiDAR 点找最近的占位体素
     print(f"[3/4] KD-Tree matching (radius={args.radius}m) ...")

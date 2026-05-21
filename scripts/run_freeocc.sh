@@ -11,7 +11,7 @@ cd /root/workspace/FreeOcc
 
 export TORCH_CUDA_ARCH_LIST="8.0"
 export CUDA_HOME=/usr/local/cuda-12.4
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_ROOT=/root/workspace/freeocc_output/$TIMESTAMP
@@ -51,7 +51,7 @@ python run.py \
   data.cam.cy=241.840 \
   data.png_depth_scale=1000.0 \
   mapping.ov_name_path=./src/scannet_utils/kunlunxai_name.txt \
-  mapping.store_clip_features=True \
+  mapping.store_clip_features=False \
   mapping.loss.supervise_with_prior=False \
   mapping.online_opt.filter.bin_th=0.02 \
   mapping.online_opt.filter.uncertainty=True \
