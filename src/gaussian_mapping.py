@@ -1009,7 +1009,7 @@ class GaussianMapper(object):
         kf_uids = [int(cam.uid) for cam in self.cameras if int(cam.uid) in self.cam2buffer]
         kf_uids = sorted(kf_uids)
         n_kf = len(kf_uids)
-        batch = 3  # 每批 3 帧，控制内存峰值
+        batch = 15  # 每批 15 帧，控制内存峰值
 
         if n_kf <= output_window:
             # 帧少，单 PLY
