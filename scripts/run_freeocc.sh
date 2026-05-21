@@ -71,25 +71,34 @@ echo "Step 2/2: Occupancy + Voxel features"
 echo "============================================"
 
 PLY="$OUTPUT_ROOT/mesh/final_rgbd.ply"
-
-if [ ! -f "$PLY" ]; then
-  echo "ERROR: PLY not found at $PLY"
-  exit 1
-fi
-
-echo "PLY: $PLY"
-echo "Occupancy output: $OCC_OUTPUT"
 mkdir -p "$OCC_OUTPUT"
-
 FEAT_CACHE="$OCC_OUTPUT/voxel_features.pkl"
 
-python "$FREEOC_DIR/scripts/occ_from_ply.py" \
-  --input "$PLY" \
-  --output "$OCC_OUTPUT" \
-  --grid-size 0.1 \
-  --thr 0.15 \
-  --max-gaussians 300000 \
-  --save-features "$FEAT_CACHE"
+# 检测单 PLY 还是多 PLY
+PLY_LIST=$(ls "$OUTPUT_ROOT/mesh"/final_rgbd_*.ply 2>/dev/null || true)
+
+if [ -n "$PLY_LIST" ]; then
+  # 多 PLY 模式: merge_sessions.py 直接投体素
+  echo "Found windowed PLYs: $(echo "$PLY_LIST" | wc -l) files"
+  python "$FREEOC_DIR/scripts/merge_sessions.py" \
+    --plies $PLY_LIST \
+    --output "$OCC_OUTPUT/merged_occ.ply" \
+    --grid-size 0.1 --thr 0.15 \
+    --feat-out "$FEAT_CACHE"
+elif [ -f "$PLY" ]; then
+  # 单 PLY 模式
+  echo "PLY: $PLY"
+  python "$FREEOC_DIR/scripts/occ_from_ply.py" \
+    --input "$PLY" \
+    --output "$OCC_OUTPUT" \
+    --grid-size 0.1 \
+    --thr 0.15 \
+    --max-gaussians 300000 \
+    --save-features "$FEAT_CACHE"
+else
+  echo "ERROR: No PLY found"
+  exit 1
+fi
 
 echo ""
 echo "============================================"

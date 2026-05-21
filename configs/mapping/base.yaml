@@ -46,3 +46,4 @@ save_mesh_each_update: false
 save_mesh_each_update_every: 1
 enable_occ_eval: true
 store_clip_features: False
+output_window: 100

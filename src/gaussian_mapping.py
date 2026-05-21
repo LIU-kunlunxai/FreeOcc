@@ -1001,18 +1001,49 @@ class GaussianMapper(object):
         we can use additional supervision from non-keyframes to get higher detail.
         """
         print("\n[Gaussian Mapper] >>> ENTER _last_call <<<\n", flush=True)
-        # Free memory before doing refinement
         torch.cuda.empty_cache()
         gc.collect()
 
-        final_aligned_gaussians = self.get_aligned_gaussians()
-        ply_path = f"{self.output}/mesh/final_{self.mode}.ply"
+        # 分批输出 PLY，避免 OOM
+        output_window = int(getattr(self.cfg.mapping, "output_window", 100))
+        kf_uids = [int(cam.uid) for cam in self.cameras if int(cam.uid) in self.cam2buffer]
+        kf_uids = sorted(kf_uids)
+        n_kf = len(kf_uids)
+        batch = 3  # 每批 3 帧，控制内存峰值
 
-        if final_aligned_gaussians is not None:
-            final_aligned_gaussians.save_ply(ply_path)
-            self.info(f"Mesh saved at {ply_path} (from get_current_gaussians)")
+        if n_kf <= output_window:
+            # 帧少，单 PLY
+            final_aligned_gaussians = self.get_aligned_gaussians()
+            ply_path = f"{self.output}/mesh/final_{self.mode}.ply"
+            if final_aligned_gaussians is not None:
+                final_aligned_gaussians.save_ply(ply_path)
+                self.info(f"Mesh saved at {ply_path}")
+            else:
+                self.info("No aligned gaussians to save (empty map)")
         else:
-            self.info("No aligned gaussians to save (empty map)")
+            # 分窗口输出多个 PLY
+            os.makedirs(f"{self.output}/mesh", exist_ok=True)
+            n_windows = (n_kf + output_window - 1) // output_window
+            self.info(f"Output windows: {n_windows} x {output_window} frames")
+
+            for wi in range(n_windows):
+                start = wi * output_window
+                end = min(start + output_window, n_kf)
+                win_size = end - start
+                self.info(f"  Window {wi+1}/{n_windows}: kf {start}-{end-1} ({win_size} frames)")
+
+                g, _, _ = self.get_current_gaussians(window_size=win_size,
+                                                       batch_size=batch, start=start)
+                if g is None or not isinstance(g, GaussianModel):
+                    self.info(f"  Window {wi+1}: no gaussians, skip")
+                    continue
+
+                ply_path = f"{self.output}/mesh/final_{self.mode}_{wi+1:04d}.ply"
+                g.save_ply(ply_path)
+                self.info(f"  Window {wi+1}: {ply_path}")
+                del g; torch.cuda.empty_cache(); gc.collect()
+
+            self.info(f"Output: {n_windows} PLY files")
 
         self.info(f"{len(self.iteration_info)} iterations, {len(self.cameras)/len(self.iteration_info)} cams/it")
 
@@ -1970,7 +2001,7 @@ class GaussianMapper(object):
         print("[对齐] 已搬 CPU, GPU 显存释放", flush=True)
 
         # 以下全在 CPU 计算
-        s = self.align_s.cpu()
+        s = self.align_s.cpu() if isinstance(self.align_s, torch.Tensor) else torch.tensor(self.align_s)
         R = self.align_R.cpu()
         t = self.align_t.cpu()
 
@@ -1992,7 +2023,7 @@ class GaussianMapper(object):
 
         return final_aligned_gaussians
 
-    def get_current_gaussians(self, window_size=None, batch_size=0):
+    def get_current_gaussians(self, window_size=None, batch_size=0, start=None):
         # -----------------------------
         # Choose window frames (prefer keyframes)
         # -----------------------------
@@ -2000,7 +2031,9 @@ class GaussianMapper(object):
         kf_uids = [int(cam.uid) for cam in self.cameras if int(cam.uid) in self.cam2buffer]
         kf_uids = sorted(kf_uids)
 
-        if window_size is not None:
+        if start is not None:
+            win_uids = kf_uids[start:start + window_size] if window_size else kf_uids[start:]
+        elif window_size is not None:
             if len(kf_uids) == 0:
                 return [], {}, []
             win_uids = kf_uids[-window_size:]
