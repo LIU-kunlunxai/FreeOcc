@@ -858,7 +858,10 @@ class GaussianModel:
         for i, n in enumerate(attr_names):
             data[n] = attributes[:, i]
         el = PlyElement.describe(data, "vertex")
-        PlyData([el]).write(path, text=False)
+        try:
+            PlyData([el]).write(path, text=False)
+        except TypeError:
+            PlyData([el]).write(path)
 
     def load_ply(self, path):
         plydata = PlyData.read(path)

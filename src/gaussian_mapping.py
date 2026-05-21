@@ -1939,8 +1939,8 @@ class GaussianMapper(object):
         scene_data = self.gt_scene_data
         gt_occ_pts = self.gt_occ_pts  # Only kept for later visualization; Sim3 alignment uses poses only.
 
-        # 分批加载避免 OOM：每 5 帧一批
-        batch_size = 10
+        # 分批加载避免 OOM：每 3 帧一批 (4090 24GB)
+        batch_size = 3
         g, frame_slices, views = self.get_current_gaussians(batch_size=batch_size)
         self.gaussians = g
 
@@ -1951,46 +1951,44 @@ class GaussianMapper(object):
         self._compute_pose_alignment()
 
         print("[对齐] 计算高斯坐标...", flush=True)
-        xyz = g.get_xyz                            # [N,3], currently in the SLAM world frame
+        xyz = g.get_xyz                            # [N,3]
         print(f"[对齐] 完成, {xyz.shape[0]} 高斯", flush=True)
-        rotation = quaternion_to_matrix(g.get_rotation)
-        R_a = self.align_R.to(rotation)                   # [3,3]
-        rotation_aligned = R_a.unsqueeze(0) @ rotation    # [N,3,3]
+
+        # 取所有参数后立即搬 CPU，释放 GPU 显存
+        rot_q = g.get_rotation
+        rot_m = quaternion_to_matrix(rot_q)         # [N,3,3]
         scale = g.get_scaling
         opacity = g.get_opacity
-        # feats = g.get_features.flatten(1)
         semantics = g.ov_feat
-        rot_q = g.get_rotation
-        rot_m = quaternion_to_matrix(rot_q)  # [N,3,3]
+        features_dc = g._features_dc.detach().clone()
 
-        # Apply Sim(3): gt_world ~= s * R @ pred_world + t.
-        # xyz: [N,3]; align_R: [3,3]; align_t: [3]
-        s = self.align_s
-        R = self.align_R
-        t = self.align_t
+        xyz_c = xyz.cpu(); rot_m_c = rot_m.cpu()
+        scale_c = scale.cpu(); opacity_c = opacity.cpu()
+        semantics_c = semantics.cpu(); features_dc_c = features_dc.cpu()
+        del g, xyz, rot_q, rot_m, scale, opacity, semantics, features_dc
+        torch.cuda.empty_cache()
+        print("[对齐] 已搬 CPU, GPU 显存释放", flush=True)
 
-        # Apply R @ xyz^T, then transpose back to [N,3].
-        points_aligned = (R @ xyz.t()).t()  # [N,3]
-        points_aligned = points_aligned * s + t.unsqueeze(0)  # [N,3]
-        scale_aligned = scale * s  # Scale Gaussian size as well.
-        rotation_aligned_m = R[None, :, :] @ rot_m  # [N,3,3]
-        rotation_aligned_q = matrix_to_quaternion(rotation_aligned_m)
+        # 以下全在 CPU 计算
+        s = self.align_s.cpu()
+        R = self.align_R.cpu()
+        t = self.align_t.cpu()
+
+        points_aligned = (R @ xyz_c.t()).t() * s + t.unsqueeze(0)
+        scale_aligned = scale_c * s
+        rot_aligned = R[None, :, :] @ rot_m_c
+        rot_q_aligned = matrix_to_quaternion(rot_aligned)
 
         final_aligned_gaussians = GaussianModel(
-            sh_degree=0, use_surface_points=False)
+            sh_degree=0, use_surface_points=False, device='cpu')
 
         final_aligned_gaussians._xyz = points_aligned
         final_aligned_gaussians._scaling = final_aligned_gaussians.scaling_inverse_activation(scale_aligned)
-        final_aligned_gaussians._rotation = rotation_aligned_q
-        final_aligned_gaussians._opacity = final_aligned_gaussians.inverse_opacity_activation(opacity)
-        final_aligned_gaussians._features_dc = g._features_dc.detach().clone()
-        print("[对齐] 保存语义特征...", flush=True)
-        final_aligned_gaussians.ov_feat = semantics.detach().clone()
-        print("[对齐] 完成, 释放内存...", flush=True)
-
-        # 释放原模型避免 GPU OOM（语义张量 3GB+）
-        del g, semantics
-        torch.cuda.empty_cache()
+        final_aligned_gaussians._rotation = rot_q_aligned
+        final_aligned_gaussians._opacity = final_aligned_gaussians.inverse_opacity_activation(opacity_c)
+        final_aligned_gaussians._features_dc = features_dc_c
+        final_aligned_gaussians.ov_feat = semantics_c
+        print("[对齐] 完成", flush=True)
 
         return final_aligned_gaussians
 

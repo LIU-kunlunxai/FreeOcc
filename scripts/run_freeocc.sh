@@ -7,14 +7,21 @@ DATA_DIR="${1:?用法: bash run_freeocc.sh /path/to/dataset}"
 
 source /home/hello/miniconda3/etc/profile.d/conda.sh
 conda activate freeocc
-cd /root/workspace/FreeOcc
+FREEOC_DIR=$(cd "$(dirname "$0")/.." && pwd)
+cd "$FREEOC_DIR"
 
-export TORCH_CUDA_ARCH_LIST="8.0"
-export CUDA_HOME=/usr/local/cuda-12.4
+export TORCH_CUDA_ARCH_LIST="8.9"
+export CUDA_HOME=$CONDA_PREFIX
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
+# 清理上一次 crash 残留的 GPU 显存
+pkill -9 -f 'python run.py' 2>/dev/null || true
+pkill -9 -f spawn_main 2>/dev/null || true
+sleep 2
+
+FREEOC_DIR=$(cd "$(dirname "$0")/.." && pwd)
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-OUTPUT_ROOT=/root/workspace/freeocc_output/$TIMESTAMP
+OUTPUT_ROOT="$FREEOC_DIR/../freeocc_output/$TIMESTAMP"
 OCC_OUTPUT=$OUTPUT_ROOT/occupancy
 
 # 优先用 LiDAR 深度
@@ -76,7 +83,7 @@ mkdir -p "$OCC_OUTPUT"
 
 FEAT_CACHE="$OCC_OUTPUT/voxel_features.pkl"
 
-python /root/workspace/FreeOcc/scripts/occ_from_ply.py \
+python "$FREEOC_DIR/scripts/occ_from_ply.py" \
   --input "$PLY" \
   --output "$OCC_OUTPUT" \
   --grid-size 0.1 \
