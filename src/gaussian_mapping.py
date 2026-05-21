@@ -1939,8 +1939,8 @@ class GaussianMapper(object):
         scene_data = self.gt_scene_data
         gt_occ_pts = self.gt_occ_pts  # Only kept for later visualization; Sim3 alignment uses poses only.
 
-        # 分批加载避免 OOM：每 15 帧一批，logit 和 CLIP 模式都走
-        batch_size = 15
+        # 分批加载避免 OOM：每 5 帧一批
+        batch_size = 10
         g, frame_slices, views = self.get_current_gaussians(batch_size=batch_size)
         self.gaussians = g
 
